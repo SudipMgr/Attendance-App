@@ -1,4 +1,4 @@
-name: CI
+name: CI-CD
 
 on:
   push:
@@ -38,3 +38,33 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/attendance-frontend:${{ github.sha }}
             ${{ secrets.DOCKERHUB_USERNAME }}/attendance-frontend:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          TAG: ${{ github.sha }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SSH_USER@$SSH_HOST" "
+            set -e
+            cd ~/attendance
+            sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=$TAG/' .env
+            docker compose pull
+            docker compose up -d
+            sleep 30
+            curl -fsS http://localhost/api/health
+          "
