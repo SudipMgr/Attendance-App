@@ -53,7 +53,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
 
-      - name: Deploy to server
+      - name: Deploy to Kubernetes
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
@@ -61,10 +61,9 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SSH_USER@$SSH_HOST" "
             set -e
-            cd ~/attendance
-            sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=$TAG/' .env
-            docker compose pull
-            docker compose up -d
-            sleep 30
+            kubectl set image deployment/backend backend=sudipmgr/attendance-backend:$TAG
+            kubectl set image deployment/frontend frontend=sudipmgr/attendance-frontend:$TAG
+            kubectl rollout status deployment/backend --timeout=180s
+            kubectl rollout status deployment/frontend --timeout=180s
             curl -fsS http://localhost/api/health
           "
